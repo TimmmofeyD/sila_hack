@@ -1,0 +1,5 @@
+train: path/to/your/train/images  
+val: path/to/your/val/images      
+
+nc: 7
+names: ['царапины', 'битые пиксели', 'проблемы с клавишами', 'замок', 'отсутствует шуруп', 'сколы', 'без дефектов']
