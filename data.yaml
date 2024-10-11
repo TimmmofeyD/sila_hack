@@ -1,5 +1,5 @@
-train: /kaggle/input/sila-dataset/train 
-val: /kaggle/input/sila-dataset/val     
+train: ../sila-dataset/train 
+val: ../sila-dataset/val     
 
 nc: 7
 names: ['царапины', 'битые пиксели', 'проблемы с клавишами', 'замок', 'отсутствует шуруп', 'сколы', 'без дефектов']
