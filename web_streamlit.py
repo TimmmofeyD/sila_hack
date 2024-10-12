@@ -1,117 +1,99 @@
 import streamlit as st
-import pandas as pd
 import numpy as np
-import time
-import matplotlib.pyplot as plt
 import cv2
-from fpdf import FPDF
 from ultralytics import YOLO
+from PIL import Image
 
+# Загрузка модели
 model_load = YOLO('best.pt')
+
+# Словарь для отображения класса в текст
+class_mapping = {
+    0: 'scratches',
+    1: 'wrong pixels',
+    2: 'keyboard defects',
+    3: 'lock',
+    4: 'crews trubles',
+    5: 'chipped',
+}
 
 # Инициализация состояний
 if 'model_applied' not in st.session_state:
     st.session_state['model_applied'] = False
 if 'rows' not in st.session_state:
     st.session_state['rows'] = 0
-if 'editing' not in st.session_state:
-    st.session_state['editing'] = {}
 
-
-def generate_pdf():
-    """Generate an example pdf file and save it to example.pdf"""
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
-    pdf.cell(200, 10, txt="Welcome to Streamlit!", ln=1, align="C")
-    pdf.output("example.pdf")
-
-
-def apply_model(test_image_path):
-    global class_label
+# Функция для применения модели и отрисовки только самых уверенных bbox
+def apply_model(image):
     st.session_state['model_applied'] = True
     st.session_state['rows'] += 1
 
-    image = cv2.imread(test_image_path)
-    results = model_load(test_image_path, conf=0.05)
+    # Применение модели YOLO
+    results = model_load(image, conf = 0.05)
 
-    for result in results[0].boxes:
-        x1, y1, x2, y2 = result.xyxy[0].tolist()
-        confidence = result.conf[0].item()
-        class_id = int(result.cls[0].item())
+    # Получаем результаты предсказаний для изображения
+    boxes = results[0].boxes.data.cpu().numpy()  # Получаем bbox: [x1, y1, x2, y2, score, class]
 
-        x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
+    # Находим самый уверенный bbox для каждого класса
+    best_boxes = []
+    class_max_scores = {}
 
-        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    for box in boxes:
+        score = box[4]
+        cls = int(box[5])  # индекс класса
 
-        # добавляем метку класса
-        class_label = class_id
-        cv2.putText(image, f"{class_label} {confidence:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0),
-                    2)
+        if cls not in class_max_scores or score > class_max_scores[cls]:
+            class_max_scores[cls] = score
+            if cls in class_max_scores:
+                best_boxes = [b for b in best_boxes if int(b[5]) != cls]  # удаляем предыдущий bbox этого класса
+            best_boxes.append(box)
 
-    output_path = './pathtophotos'
-    cv2.imwrite(output_path, image)
-    plt.figure(figsize=(10, 10))
-    plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    plt.axis('off')
-    plt.title(f"имя класса {class_label}")
-    plt.show()
+    # Копируем изображение для отрисовки bbox
+    annotated_image = image.copy()
 
+    # Отрисовываем bbox на изображении
+    for box in best_boxes:
+        x1, y1, x2, y2, score, cls = box
+        cls_label = class_mapping.get(int(cls), 'неизвестный класс')  # Получаем текстовое значение класса
+        annotated_image = cv2.rectangle(annotated_image, (int(x1), int(y1)), (int(x2), int(y2)), (0, 255, 0), 2)
+        annotated_image = cv2.putText(annotated_image, f'{cls_label}: {score:.2f}', (int(x1), int(y1) - 10),
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 255, 0), 2)
 
-# Функция для изменения состояния кнопки сохранения изменений
-def toggle_edit_save(index, text):
-    st.session_state[f'editing_{index}'] = False
-    st.write(text)
+    return annotated_image
 
-
-def display_buttons(index, text):
-    if index == 0:
-        col1, col2 = st.columns(2)
-        with col1:
-            st.button(f'Сохранить изменения', key=f'edit_{index}', on_click=toggle_edit_save(index, text),
-                      args=(index,))
-        with col2:
-            col1, col2 = st.columns(2)
-            with col1:
-                format = st.selectbox('Формат отчёта', ('pdf', 'txt'))
-
-            with col2:
-                st.download_button(label='Сгенерировать отчёт', data=text, file_name=f'Отчёт.{format}')
-
-
-st.set_page_config(page_title="Классификация дефектов ноутбуков",
-                   page_icon="💻")
+# Конфигурация страницы
+st.set_page_config(page_title="Классификация дефектов ноутбуков", page_icon="💻")
 st.title("Классификация дефектов ноутбуков на базе ИИ")
-uploaded_files = st.file_uploader("Загрузите изображения ноутбука в форматах png | jpg | jpeg:",
-                                  type=["png", "jpg", "jpeg"],
-                                  accept_multiple_files=True)
 
-for file in uploaded_files:
-    st.image(file)
+# Загрузка изображения
+uploaded_file = st.file_uploader("Загрузите изображение ноутбука (png, jpg, jpeg):", type=["png", "jpg", "jpeg"])
 
-# Кнопка для применения модели
-if st.button(f"Применить модель", key='apply_model'):
-    apply_model()
+if uploaded_file is not None:
+    # Преобразование загруженного файла в изображение
+    image = Image.open(uploaded_file)
+    image_np = np.array(image)
+    st.image(image, caption="Загруженное изображение", use_column_width=True)
 
-# Отображение кнопок после применения модели
-for i in range(st.session_state['rows']):
-    txt = st.text_area('Описание', key='text',
-                       value='Test_text, aaaaaaaaaaaaaaa aaaaaaaaaaaaaaaaaaaaaaaaaaaaa aaaaaaaaaaaaaaaaaaaaaaaaaaaaa aaaaaaaaaa')
-    display_buttons(i, txt)
+    # Кнопка для применения модели
+    if st.button("Применить модель"):
+        # Применение модели к изображению
+        annotated_image = apply_model(image_np)
 
+        # Вывод изображения с наложенной разметкой
+        st.image(annotated_image, caption="Изображение с разметкой", use_column_width=True)
+
+# Footer
 footer = """<style>
 a:link , a:visited{
 color: blue;
 background-color: transparent;
 text-decoration: underline;
 }
-
 a:hover,  a:active {
 color: red;
 background-color: transparent;
 text-decoration: underline;
 }
-
 .footer {
 position: fixed;
 left: 0;
