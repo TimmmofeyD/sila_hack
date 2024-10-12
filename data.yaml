@@ -1,5 +1,5 @@
 train: ../train/images
 val: ../val/images    
 
-nc: 7
-names: ['scratches', 'broken_pixels', 'key_problems', 'lock', 'missing_screw', 'chips', 'no_defects']
+nc: 6
+names: ['битые пиксели', 'замок', 'отсутствует шуруп', 'проблемы с клавишами', 'сколы', 'царапины']
