@@ -1,5 +1,5 @@
-train: ../kaggle/input/sila-dataset/train/images
-val: ../kaggle/input/sila-dataset/val/images    
+train: ../train/images
+val: ../val/images    
 
 nc: 7
 names: ['scratches', 'broken_pixels', 'key_problems', 'lock', 'missing_screw', 'chips', 'no_defects']
